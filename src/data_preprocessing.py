@@ -154,6 +154,111 @@ class ForexDataPreprocessor:
         
         return df
     
+    def add_price_action_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add advanced price action features for better signal detection
+        
+        These features capture candlestick patterns, volatility regimes,
+        and market microstructure that technical indicators miss.
+        
+        Features include:
+        - Candle body/wick ratios
+        - Consecutive streak counters
+        - Relative position within day/session
+        - Volatility regime indicators
+        - Higher timeframe context
+        """
+        df = df.copy()
+        
+        # === CANDLE BODY & WICK FEATURES ===
+        # Body size relative to full range
+        candle_range = df['high'] - df['low']
+        candle_body = abs(df['close'] - df['open'])
+        df['body_ratio'] = candle_body / (candle_range + 1e-8)  # Avoid division by zero
+        
+        # Upper wick (above body)
+        upper_shadow = df['high'] - df[['close', 'open']].max(axis=1)
+        df['upper_wick_ratio'] = upper_shadow / (candle_range + 1e-8)
+        
+        # Lower wick (below body)
+        lower_shadow = df[['close', 'open']].min(axis=1) - df['low']
+        df['lower_wick_ratio'] = lower_shadow / (candle_range + 1e-8)
+        
+        # Candle direction
+        df['candle_direction'] = (df['close'] > df['open']).astype(int)  # 1=bullish, 0=bearish
+        
+        # Body size relative to recent average
+        avg_body = candle_body.rolling(window=20).mean()
+        df['body_size_ratio'] = candle_body / (avg_body + 1e-8)
+        
+        # === CONSECUTIVE STREAKS ===
+        # Count consecutive green/red candles
+        direction_change = df['candle_direction'].diff().ne(0)
+        streak_id = direction_change.cumsum()
+        df['candle_streak'] = df.groupby(streak_id).cumcount() + 1
+        # Make streak negative for bearish streaks
+        df['candle_streak'] = df['candle_streak'] * (df['candle_direction'] * 2 - 1)
+        
+        # === VOLATILITY REGIME FEATURES ===
+        # ATR (Average True Range) - proper calculation
+        high_low = df['high'] - df['low']
+        high_close = abs(df['high'] - df['close'].shift(1))
+        low_close = abs(df['low'] - df['close'].shift(1))
+        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        df['atr'] = true_range.rolling(window=14).mean()
+        
+        # ATR ratio (current vs average) - detects volatility spikes
+        avg_atr = df['atr'].rolling(window=50).mean()
+        df['atr_ratio'] = df['atr'] / (avg_atr + 1e-8)
+        
+        # Volatility spike detector
+        df['volatility_spike'] = (df['atr_ratio'] > 1.5).astype(int)
+        
+        # === PRICE POSITION FEATURES ===
+        # Where is close relative to high-low range? (0=at low, 1=at high)
+        df['close_position'] = (df['close'] - df['low']) / (candle_range + 1e-8)
+        
+        # Distance from recent high/low
+        rolling_high = df['high'].rolling(window=20).max()
+        rolling_low = df['low'].rolling(window=20).min()
+        rolling_range = rolling_high - rolling_low
+        df['dist_from_high'] = (rolling_high - df['close']) / (rolling_range + 1e-8)
+        df['dist_from_low'] = (df['close'] - rolling_low) / (rolling_range + 1e-8)
+        
+        # === MOMENTUM & ACCELERATION ===
+        # Price velocity (rate of change)
+        df['price_velocity'] = df['close'].diff() / df['close'].shift(1)
+        df['price_acceleration'] = df['price_velocity'].diff()
+        
+        # Volume acceleration (if volume available)
+        if 'volume' in df.columns:
+            df['volume_velocity'] = df['volume'].diff() / (df['volume'].shift(1) + 1e-8)
+            # Volume surge detector
+            avg_volume = df['volume'].rolling(window=20).mean()
+            df['volume_ratio'] = df['volume'] / (avg_volume + 1e-8)
+            df['volume_surge'] = (df['volume_ratio'] > 2.0).astype(int)
+        
+        # === HIGHER TIMEFRAME CONTEXT ===
+        # Longer-period trend indicators (simulating 5-min, 15-min views)
+        df['sma_50'] = df['close'].rolling(window=50).mean()
+        df['sma_100'] = df['close'].rolling(window=100).mean()
+        
+        # Price relative to higher timeframe MAs
+        df['price_vs_sma50'] = (df['close'] - df['sma_50']) / (df['sma_50'] + 1e-8)
+        df['price_vs_sma100'] = (df['close'] - df['sma_100']) / (df['sma_100'] + 1e-8)
+        
+        # Higher timeframe trend
+        df['sma50_slope'] = df['sma_50'].diff(5)  # 5-bar slope
+        df['sma100_slope'] = df['sma_100'].diff(10)  # 10-bar slope
+        
+        # === RECENT PRICE ACTION ===
+        # Last 3 candles' characteristics (helps capture short-term patterns)
+        for i in [1, 2, 3]:
+            df[f'body_ratio_lag{i}'] = df['body_ratio'].shift(i)
+            df[f'close_position_lag{i}'] = df['close_position'].shift(i)
+        
+        return df
+    
     def add_lagged_features(
         self, 
         df: pd.DataFrame, 
@@ -341,6 +446,8 @@ class ForexDataPreprocessor:
         # Add technical indicators
         if self.add_technical_indicators:
             df = self.add_technical_indicators_basic(df)
+            # Add advanced price action features
+            df = self.add_price_action_features(df)
         
         # Add lagged features
         df = self.add_lagged_features(df, ['close', 'returns'], lags=[1, 2, 3, 5])
@@ -354,10 +461,10 @@ class ForexDataPreprocessor:
         # Drop NaN values
         df = df.dropna()
         
-        # Select feature columns (exclude OHLCV and target)
+        # Select feature columns (exclude OHLCV, target, and timestamp)
         exclude_cols = ['open', 'high', 'low', 'close', 'volume', 'target', 
-                       'next_close', 'minute_of_day']
-        feature_columns = [col for col in df.columns if col not in exclude_cols]
+                       'next_close', 'minute_of_day', 'timestamp', 'date', 'time', 'datetime']
+        feature_columns = [col for col in df.columns if col not in exclude_cols and df[col].dtype in ['float64', 'int64']]
         
         # Normalize features
         df = self.normalize_features(df, feature_columns, fit=fit)

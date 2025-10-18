@@ -1,0 +1,67 @@
+================================================================================
+TCN USDJPY TRAINING PIPELINE
+================================================================================
+Start time: 2025-10-18 07:38:09
+Data path: data/usdjpy_100k.csv
+Train size: 60000
+Validation size: 30000
+Sequence length: 50
+Model path: models/tcn_usdjpy.pt
+Loading data from: data/usdjpy_100k.csv
+Loaded 100000 rows
+Columns: ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+Date range: 2025-10-18 00:00:00 to 2025-10-18 23:59:00
+
+Data Summary:
+  Total bars: 100000
+  Columns: ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+  Date range: 2025-10-18 00:00:00 to 2025-10-18 23:59:00
+
+Price Statistics:
+  Open range: 145.56400 - 153.26700
+  Close range: 145.56400 - 153.26900
+
+================================================================================
+SPLITTING DATA
+================================================================================
+Total bars: 100000
+Training: 60000 bars (60.0%)
+Validation: 30000 bars (30.0%)
+Testing: 10000 bars (10.0%)
+
+Train period: 2025-10-18 00:00:00 to 2025-10-18 14:19:00
+Val period: 2025-10-18 14:19:00 to 2025-10-18 21:32:00
+Test period: 2025-10-18 21:32:00 to 2025-10-18 23:59:00
+
+================================================================================
+PREPROCESSING DATA
+================================================================================
+Computing technical indicators...
+Training features shape: (59840, 50, 50)
+Training labels shape: (59840,)
+Number of features: 50
+Feature names: ['returns', 'open_returns', 'high_returns', 'low_returns', 'sma_5', 'sma_15', 'ema_5', 'ema_15', 'rsi', 'macd', 'macd_signal', 'volatility', 'momentum', 'body_ratio', 'upper_wick_ratio', 'lower_wick_ratio', 'candle_direction', 'body_size_ratio', 'candle_streak', 'atr', 'atr_ratio', 'volatility_spike', 'close_position', 'dist_from_high', 'dist_from_low', 'price_velocity', 'price_acceleration', 'volume_velocity', 'volume_ratio', 'volume_surge', 'sma_50', 'sma_100', 'price_vs_sma50', 'price_vs_sma100', 'sma50_slope', 'sma100_slope', 'body_ratio_lag1', 'close_position_lag1', 'body_ratio_lag2', 'close_position_lag2', 'body_ratio_lag3', 'close_position_lag3', 'close_lag_1', 'close_lag_2', 'close_lag_3', 'close_lag_5', 'returns_lag_1', 'returns_lag_2', 'returns_lag_3', 'returns_lag_5']
+
+Transforming validation data...
+Validation features shape: (29840, 50, 50)
+
+Transforming test data...
+Test features shape: (9840, 50, 50)
+
+Class Distribution:
+  Train - Up: 29872/59840 (49.92%)
+  Val   - Up: 14890/29840 (49.90%)
+  Test  - Up: 4923/9840 (50.03%)
+Preprocessor saved to: models/tcn_usdjpy_preprocessor.pkl
+
+================================================================================
+TRAINING TCN MODEL (IMPROVED)
+================================================================================
+Model architecture (IMPROVED + REGULARIZED):
+  Input channels: 50
+  Hidden channels: [128, 128, 64, 64] ← LARGER!
+  Kernel size: 3
+  Dropout: 0.5 ← STRONG regularization!
+  Receptive field: 31
+  Total parameters: 245,249
+Device: cpu
