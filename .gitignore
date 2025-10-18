@@ -1,0 +1,94 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# Models and Data
+models/*.h5
+models/*.pkl
+models/*.pt
+models/*.pth
+data/*.csv
+data/*.json
+!data/example_data.csv
+!data/README.md
+
+# Logs
+logs/*.log
+logs/*.txt
+logs/*.jsonl
+*.log
+
+# Credentials (IMPORTANT - Never commit sensitive data)
+config.json
+credentials.json
+.env
+secrets.py
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Training artifacts
+training_history.png
+*.png
+!docs/*.png
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Archive (old/temporary files)
+.archive/

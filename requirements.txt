@@ -1,0 +1,34 @@
+# TCN Binary Options Trading Bot Requirements
+# Python >= 3.10, <= 3.12
+
+# Quotex API (optional - for live trading)
+quotexpy==1.40.7
+
+# Deep Learning - PyTorch (primary implementation)
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Deep Learning - TensorFlow/Keras (legacy support)
+tensorflow>=2.13.0
+keras>=2.13.0
+keras-tcn>=2.9.3
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Technical Analysis
+ta>=0.11.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# API Clients
+requests>=2.31.0
+
+# Utilities
+python-dateutil>=2.8.2

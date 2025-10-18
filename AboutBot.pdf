@@ -1,0 +1,241 @@
+Temporal Convolutional Networks (TCNs) for Forex Forecasting
+Temporal Convolutional Networks (TCNs) are a class of 1D-convolutional architectures designed for
+sequence modeling and time-series forecasting. Unlike recurrent nets, a TCN uses causal, dilated
+convolutions so that each output at time t depends only on inputs ≤ t. By stacking layers with
+exponentially increasing dilation, a TCN can cover a large receptive field (long history) with relatively few
+layers. For example, Bai et al. (2018) show that a simple TCN “convincingly outperforms” LSTM/GRU models
+across many tasks and has longer effective memory. TCNs avoid the vanishing/exploding gradients and
+sequential bottleneck of RNNs, allowing parallel computation and stable gradients. In practice, a TCN model
+consists of stacked residual blocks of 1D convolutions (often with skip connections) that maintain the input/
+output length by padding, and use dilation to expand context.
+TCNs are well-suited to short-term FX forecasting for several reasons. First, their convolutional filters can
+automatically learn local patterns in the high-frequency price data (filtering out noise) and stack these to
+detect longer patterns . Second, the causal/dilated structure explicitly controls memory: by adjusting
+dilation and depth, the model can capture dependencies up to minutes or hours in the past. Third, unlike
+pure autoregressive models, TCNs can ingest multivariate inputs (e.g. OHLC prices, indicators) with their
+multi-channel convolutions. These traits make TCNs competitive for intra-day series (1–5 minute bars)
+where both very recent moves and slightly longer context may matter.
+Data Sources: High-Resolution Forex Candles
+Accurate historical data is essential. Several free or low-cost sources provide minute-level FX quotes:
+HistData.com – Offers free tick and 1-minute bar data for many pairs (EUR/USD, USD/JPY, GBP/JPY,
+etc.) in CSV files. Data is organized by year/month and includes common majors.
+Dukascopy – A Swiss broker with a “Historical Data Feed” providing high-quality data from tick to 1-
+min bars. Users can download any pair’s history in .csv or .hst format via their web interface.
+Currency API services – Some APIs allow limited free queries: e.g. Alpha Vantage, Twelve Data, or
+OANDA’s practice account API can be used to pull 1–5 min FX data (with registration). For example,
+Alpha Vantage’s FX endpoint returns intraday bars (subject to rate limits).
+Platform data – Many trading platforms (MetaTrader, NinjaTrader, etc.) let you export minute-bars.
+For example, MetaTrader’s History Center can export OHLC CSV for any symbol.
+Alternate exchanges – Some sites like Stooq or Yahoo Finance offer intraday data (typically 5-min)
+for major pairs. Kaggle and GitHub also have community-shared FX datasets (though update
+frequency may vary).
+When using such sources, check data quality (gaps, spread), and align time zones. For binary-options
+simulations, use the bid-side closing prices (or mid) from the broker you plan to trade, since payoffs are
+based on where prices settle at expiry.
+1
+•
+•
+•
+•
+•
+1
+Data Preprocessing & Feature Engineering
+Before training a TCN, prepare the data as a supervised sequence problem. Common steps include:
+Resampling/aligning: If mixing sources (e.g. 1-min OANDA with 3-min MT4), ensure consistent
+timestamps and fill any missing candles (forward-fill or drop). Typically use closed candle values
+(close price) or OHLCV vectors.
+Normalization/Scaling: Neural nets work better with scaled inputs. Convert prices to returns or
+normalized values, e.g. log returns or percentage changes, then apply z-score or
+min-max scaling (fit on training set only) . This keeps inputs in [-1,1] or similar.
+Multivariate channels: Use all relevant price fields as separate channels. A common choice is to
+feed the TCN channels = [open, high, low, close, volume] (or fewer). This exploits convolution across
+features at each time step. If volume is unavailable (FX often has tick count or “real volume” from
+brokers), omit or use tick count as proxy.
+Lagged sequences: Format the dataset into overlapping sliding windows. For example, for 1-min
+data, a window of length 60 (past 60 minutes) could be used to predict the next candle. Each training
+sample is a 3D tensor of shape (channels, sequence_length), and the label is the next period’s
+outcome (price or direction).
+Technical indicators: Optionally compute features like moving averages, RSI, MACD, ATR, etc., and
+append them as additional channels. Research has shown that incorporating statistical/technical
+indicators can help capture trends or volatility (e.g. a forex forecasting model used trend/oscillator
+indicators to highlight momentum and volatility features). For instance, add a rolling 5-min and 15-
+min SMA or recent volatility as extra features. However, note TCNs can often learn similar patterns
+from raw prices, so indicators are optional.
+Time features: Intraday seasonality can matter (market opens/closes, lunch hours). You may add
+features like “minute of day” (normalized cyclically) or binary flags (e.g. London session on/off).
+These can be appended as constant features across the window.
+In summary, your input tensor for PyTorch would be shape (batch_size, C, L) where C = number of
+channels (e.g. 4 for OHLC, or more with indicators) and L = window length. The target can be defined in two
+ways: regression (predict next price) or classification (predict up/down direction). For binary options,
+classification is common: e.g. label 1 if next close > current close (call wins), else 0.
+Model Implementation
+Below is an illustrative PyTorch implementation of a simple TCN and training loop. We use nn.Conv1d
+with causal/dilated layers to build the network, then add a final linear layer for binary classification. In
+practice, one might use a specialized TCN library (e.g. the pytorch-tcn package) or a deeper architecture
+with residual blocks.
+import torch
+import torch.nn as nn
+import torch.optim as optim
+class SimpleTCN(nn.Module):
+def __init__(self, input_channels, num_channels, kernel_size=3,
+•
+•
+rt = ln(Pt/Pt−1)
+1
+•
+•
+•
+•
+2
+dropout=0.1):
+super().__init__()
+layers = []
+for i, out_ch in enumerate(num_channels):
+dilation = 2 ** i
+in_ch = input_channels if i == 0 else num_channels[i-1]
+padding = (kernel_size - 1) * dilation
+layers += [
+nn.Conv1d(in_ch, out_ch, kernel_size, padding=padding,
+dilation=dilation),
+nn.ReLU(),
+nn.Dropout(dropout)
+]
+self.network = nn.Sequential(*layers)
+self.out = nn.Linear(num_channels[-1], 1) # final output to 1 value
+def forward(self, x):
+# x shape: (batch, channels, sequence_length)
+y = self.network(x)
+# Crop extra padded time steps (causal conv extends output length by
+padding)
+y = y[..., :x.size(2)]
+# Use last time-step for prediction
+y = y[:, :, -1] # shape: (batch, num_channels[-1])
+y = self.out(y) # shape: (batch, 1)
+return torch.sigmoid(y).squeeze(1)
+# Example usage:
+model = SimpleTCN(input_channels=4, num_channels=[16, 16, 8], kernel_size=3,
+dropout=0.1)
+print(model)
+Training loop: After loading your preprocessed data into training tensors (X in shape (N, C, L) , and
+binary labels y as shape (N,) ), train as usual:
+criterion = nn.BCELoss() # binary cross-entropy for up/down
+optimizer = optim.Adam(model.parameters(), lr=1e-3)
+for epoch in range(num_epochs):
+model.train()
+epoch_loss = 0
+for X_batch, y_batch in train_loader: # assume DataLoader yielding batches
+optimizer.zero_grad()
+preds = model(X_batch) # outputs in [0,1]
+loss = criterion(preds, y_batch.float())
+loss.backward()
+3
+optimizer.step()
+epoch_loss += loss.item()
+print(f"Epoch {epoch}: loss={epoch_loss:.4f}")
+After training, evaluate on a validation/test set:
+model.eval()
+with torch.no_grad():
+preds = model(X_val) # shape (N_val,)
+predicted_labels = (preds > 0.5).int()
+accuracy = (predicted_labels == y_val).float().mean()
+print("Validation accuracy:", accuracy.item())
+Use metrics like accuracy, precision/recall, or AUC. For binary options, you may also simulate the predicted
+trade outcomes on historical data to compute expected return.
+Example Hyperparameters Value
+Sequence length (window L) 60 (past minutes)
+TCN channels per block [16, 16, 8]
+Kernel size 3
+Dilation factors 1, 2, 4
+Batch size 64
+Learning rate 0.001
+Dropout 0.1
+Training epochs 20–50
+Adjust these based on data size and validation performance. Larger models (more layers or channels) can
+capture more complexity but risk overfitting on limited data.
+Real-Time Prediction and Auto-Trading
+To trade in real time, you need a live data feed and a trade execution interface. The loop typically works as:
+Fetch live data: At each candle close (every 1 or 3 minutes), retrieve the latest price candle. This can
+be done via a broker API (if available) or by pulling from a WebSocket/HTTP data source. For
+example, OANDA or Alpaca APIs can stream live FX quotes into Python. If using a platform like
+MetaTrader, one could use its Python connector or export data via files. Ensure minimal latency.
+Generate prediction: Feed the most recent L-length window of data (reshaped as (1, C, L) ) into
+the trained TCN. Get a probability or direction (call/put). E.g.:
+1.
+2.
+4
+# on each new candle:
+x_live = torch.tensor(latest_window, dtype=torch.float).unsqueeze(0) #
+shape (1, C, L)
+prob = model(x_live).item()
+direction = "CALL" if prob > 0.5 else "PUT"
+Place trade: Send an order to your trading platform. This is the tricky part for Quotex: as of now,
+Quotex does not offer a public API, so automated order placement requires a workaround.
+Options include:
+Web automation: Use a browser automation tool (Selenium) to log in to Quotex’s web interface and
+simulate button clicks at the right time (click “call” or “put” based on direction ).
+MetaTrader bridge: Some traders use MT4/MT5 with a bridge plugin (e.g. MT2Trading or
+AutoBotSignal) that converts signals into binary trades. These are paid solutions.
+Alternative brokers: Consider switching to a broker with an API. For example, Deriv (Binary.com)
+has a JSON API that supports binary options trades, and OANDA has an API for vanilla forex (though
+not binary) that you could use similarly for directional trading.
+Binary Options libraries: There are community libraries (e.g. one on GitHub for IQ Option) that
+reverse-engineer the broker’s protocol. Use with caution (can violate terms of service).
+Execution timing: For 1–3 minute options, timing is crucial. Ensure your trade command reaches
+the broker before the next candle forms. Account for any latency. Many systems wait a few seconds
+after candle close to confirm the final price before deciding.
+A pseudocode loop:
+while True:
+candle = get_latest_candle()
+window = update_window_with(candle)
+pred = model.predict(window)
+if pred > 0.5:
+place_order("CALL", expiration=1min)
+else:
+place_order("PUT", expiration=1min)
+sleep(remaining_seconds_to_next_candle)
+Note: Automated trading with real money carries significant risk. Always paper-trade first. If doing this in
+production, handle exceptions (disconnects, bad data) carefully, and follow the broker’s rate limits. Respect
+trading session times (markets may close on weekends or holidays).
+3.
+4.
+5.
+6.
+7.
+8.
+5
+Evaluation, Backtesting, and Risks
+Robust evaluation is critical. Split your historical data into chronological train/validation/test sets (e.g. train
+on 2020-2022, validate on 2023, test on 2024). Use walk-forward (rolling) validation to mimic live
+conditions: repeatedly train on data up to time t, test on t+1…t+k. Ensure no lookahead bias (don’t shuffle
+time series; respect order) .
+Backtest by simulating trades: apply the model’s signal to past data and calculate what the payoff would
+have been (accounting for binary payout ratios and fees). Common metrics include accuracy, precision, and
+especially profitability metrics (win rate, profit factor, Sharpe ratio on returns). For binary options, even a
+50% accuracy may be losing if payouts <1:1, so examine net ROI.
+Always reserve a strictly out-of-sample test period that the model never saw until final testing. This
+assesses real-world performance. Consider using cross-validation tailored to time series (not random folds)
+to tune hyperparameters.
+Risks and precautions: Binary options are high-risk, short-duration bets. Regulators emphasize their
+dangers (in fact, many jurisdictions ban them). Key cautions:
+Overfitting: Deep models can memorize noise in 1-min data. Use dropout and early stopping, and
+check that model performance is consistent over different years.
+Slippage and execution delays: The model’s prediction assumes execution at the closing price. In
+reality, there may be latency or spread. This can erode small edges.
+Trade size and money management: Never bet more than a small fraction of capital on any trade.
+Use fixed fractional sizing or the Kelly criterion conservatively. Binary options have “all-or-nothing”
+payoffs, so a string of losses can wipe out gains. Incorporate stop-loss or daily loss limits at the
+portfolio level.
+Changing market conditions: Models trained on historical patterns may fail in regime shifts (e.g.
+news events, volatility spikes). Retrain periodically with new data.
+Confirmation and ensemble: It can help to require the model’s confidence to exceed a threshold
+before trading, or to combine signals from multiple timeframes or models.
+Legality and broker rules: Ensure your broker allows automated trading. Some forbid bots and may
+flag accounts for suspicious trading patterns.
+In summary, while a TCN can learn complex short-term dependencies in Forex data, its predictions are
+not guarantees. Thorough backtesting, realistic simulations (including commission/spread), and prudent
+risk management are essential. Always interpret results critically and be prepared for losses.
+Sources: TCN architecture and advantages; free FX data (HistData, Dukascopy); feature examples ;
+binary options risk warnings. Each section above reflects these published insights and common industry
+practices.
+Time-series analysis with smoothed Convolutional Neural Network | Journal of Big Data | Full Text
+https://journalofbigdata.springeropen.com/articles/10.1186/s40537-022-00599-y
