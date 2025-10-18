@@ -1,0 +1,144 @@
+================================================================================
+TCN USDJPY TRAINING PIPELINE
+================================================================================
+Start time: 2025-10-18 05:48:26
+Data path: data/usdjpy_100k.csv
+Train size: 60000
+Validation size: 30000
+Sequence length: 50
+Model path: models/tcn_usdjpy.pt
+Loading data from: data/usdjpy_100k.csv
+Loaded 100000 rows
+Columns: ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+Date range: 2025-10-18 00:00:00 to 2025-10-18 23:59:00
+
+Data Summary:
+  Total bars: 100000
+  Columns: ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+  Date range: 2025-10-18 00:00:00 to 2025-10-18 23:59:00
+
+Price Statistics:
+  Open range: 145.56400 - 153.26700
+  Close range: 145.56400 - 153.26900
+
+================================================================================
+SPLITTING DATA
+================================================================================
+Total bars: 100000
+Training: 60000 bars (60.0%)
+Validation: 30000 bars (30.0%)
+Testing: 10000 bars (10.0%)
+
+Train period: 2025-10-18 00:00:00 to 2025-10-18 14:19:00
+Val period: 2025-10-18 14:19:00 to 2025-10-18 21:32:00
+Test period: 2025-10-18 21:32:00 to 2025-10-18 23:59:00
+
+================================================================================
+PREPROCESSING DATA
+================================================================================
+Computing technical indicators...
+Training features shape: (59935, 21, 50)
+Training labels shape: (59935,)
+Number of features: 50
+Feature names: ['returns', 'open_returns', 'high_returns', 'low_returns', 'sma_5', 'sma_15', 'ema_5', 'ema_15', 'rsi', 'macd', 'macd_signal', 'volatility', 'momentum', 'close_lag_1', 'close_lag_2', 'close_lag_3', 'close_lag_5', 'returns_lag_1', 'returns_lag_2', 'returns_lag_3', 'returns_lag_5']
+
+Transforming validation data...
+Validation features shape: (29935, 21, 50)
+
+Transforming test data...
+Test features shape: (9935, 21, 50)
+
+Class Distribution:
+  Train - Up: 29917/59935 (49.92%)
+  Val   - Up: 14935/29935 (49.89%)
+  Test  - Up: 4974/9935 (50.07%)
+Preprocessor saved to: models/tcn_usdjpy_preprocessor.pkl
+
+================================================================================
+TRAINING TCN MODEL (IMPROVED)
+================================================================================
+Model architecture (IMPROVED):
+  Input channels: 21
+  Hidden channels: [128, 128, 64, 64] ← LARGER!
+  Kernel size: 3
+  Dropout: 0.3
+  Receptive field: 31
+  Total parameters: 230,401
+Device: cpu
+
+Class balance:
+  Positive samples (UP): 29917 (49.9%)
+  Negative samples (DOWN): 30018 (50.1%)
+  Positive class weight: 1.0034 ← BALANCING!
+
+Starting training with CLASS-WEIGHTED LOSS...
+This will help fix the prediction bias!
+
+Model saved to: models/tcn_usdjpy.pt
+
+================================================================================
+EVALUATING MODEL
+================================================================================
+
+Test Set Performance:
+  Overall Accuracy: 50.01%
+  Up Accuracy: 35.73%
+  Down Accuracy: 64.32%
+
+================================================================================
+RUNNING BACKTEST
+================================================================================
+Error during training: 'ForexDataPreprocessor' object has no attribute 'sequence_length'
+Traceback (most recent call last):
+  File "/workspaces/TCN-Qbot/train_usdjpy.py", line 402, in main
+    results = run_backtest(trainer, test_df, preprocessor, predictions)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspaces/TCN-Qbot/train_usdjpy.py", line 289, in run_backtest
+    sequence_length = preprocessor.sequence_length
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ForexDataPreprocessor' object has no attribute 'sequence_length'
+
+Preprocessing complete:
+Total samples: 59935
+Input shape: (59935, 21, 50)
+Number of features: 21
+Target distribution: 49.92% up, 50.08% down
+
+Preprocessing complete:
+Total samples: 29935
+Input shape: (29935, 21, 50)
+Number of features: 21
+Target distribution: 49.89% up, 50.11% down
+
+Preprocessing complete:
+Total samples: 9935
+Input shape: (9935, 21, 50)
+Number of features: 21
+Target distribution: 50.07% up, 49.93% down
+Epoch 1/100 - Train Loss: 0.7059, Train Acc: 0.5016 - Val Loss: 0.6954, Val Acc: 0.4980
+Epoch 2/100 - Train Loss: 0.6957, Train Acc: 0.5020 - Val Loss: 0.6946, Val Acc: 0.5024
+Epoch 3/100 - Train Loss: 0.6948, Train Acc: 0.5048 - Val Loss: 0.6944, Val Acc: 0.5033
+Epoch 4/100 - Train Loss: 0.6945, Train Acc: 0.5043 - Val Loss: 0.6944, Val Acc: 0.5006
+Epoch 5/100 - Train Loss: 0.6943, Train Acc: 0.5035 - Val Loss: 0.6945, Val Acc: 0.5001
+Epoch 6/100 - Train Loss: 0.6942, Train Acc: 0.5086 - Val Loss: 0.6943, Val Acc: 0.5023
+Epoch 7/100 - Train Loss: 0.6940, Train Acc: 0.5110 - Val Loss: 0.6943, Val Acc: 0.5054
+Epoch 8/100 - Train Loss: 0.6940, Train Acc: 0.5107 - Val Loss: 0.6944, Val Acc: 0.5034
+Epoch 9/100 - Train Loss: 0.6940, Train Acc: 0.5112 - Val Loss: 0.6945, Val Acc: 0.5040
+Epoch 10/100 - Train Loss: 0.6937, Train Acc: 0.5142 - Val Loss: 0.6945, Val Acc: 0.5033
+Epoch 11/100 - Train Loss: 0.6937, Train Acc: 0.5142 - Val Loss: 0.6945, Val Acc: 0.5035
+Epoch 12/100 - Train Loss: 0.6932, Train Acc: 0.5213 - Val Loss: 0.6949, Val Acc: 0.5038
+Epoch 13/100 - Train Loss: 0.6928, Train Acc: 0.5213 - Val Loss: 0.6949, Val Acc: 0.5027
+Epoch 14/100 - Train Loss: 0.6926, Train Acc: 0.5227 - Val Loss: 0.6954, Val Acc: 0.5044
+Epoch 15/100 - Train Loss: 0.6923, Train Acc: 0.5266 - Val Loss: 0.6951, Val Acc: 0.5024
+Epoch 16/100 - Train Loss: 0.6912, Train Acc: 0.5284 - Val Loss: 0.6976, Val Acc: 0.4998
+Epoch 17/100 - Train Loss: 0.6906, Train Acc: 0.5316 - Val Loss: 0.6966, Val Acc: 0.4989
+Epoch 18/100 - Train Loss: 0.6901, Train Acc: 0.5334 - Val Loss: 0.6962, Val Acc: 0.5003
+Epoch 19/100 - Train Loss: 0.6894, Train Acc: 0.5367 - Val Loss: 0.6965, Val Acc: 0.5012
+Epoch 20/100 - Train Loss: 0.6879, Train Acc: 0.5433 - Val Loss: 0.6980, Val Acc: 0.4995
+Epoch 21/100 - Train Loss: 0.6870, Train Acc: 0.5453 - Val Loss: 0.6980, Val Acc: 0.4990
+Epoch 22/100 - Train Loss: 0.6864, Train Acc: 0.5480 - Val Loss: 0.7004, Val Acc: 0.5012
+Epoch 23/100 - Train Loss: 0.6859, Train Acc: 0.5493 - Val Loss: 0.6986, Val Acc: 0.5014
+Epoch 24/100 - Train Loss: 0.6841, Train Acc: 0.5545 - Val Loss: 0.6990, Val Acc: 0.5024
+Epoch 25/100 - Train Loss: 0.6833, Train Acc: 0.5578 - Val Loss: 0.6997, Val Acc: 0.5006
+Epoch 26/100 - Train Loss: 0.6818, Train Acc: 0.5586 - Val Loss: 0.7025, Val Acc: 0.5018
+Early stopping at epoch 26

@@ -146,15 +146,16 @@ class TCNForex(nn.Module):
         """
         return (kernel_size - 1) * (2 ** num_levels - 1) + 1
     
-    def forward(self, x):
+    def forward(self, x, return_logits=False):
         """
         Forward pass
         
         Args:
             x: Input tensor of shape (batch_size, input_channels, sequence_length)
+            return_logits: If True, return raw logits instead of probabilities
         
         Returns:
-            predictions: Tensor of shape (batch_size,) with probabilities [0, 1]
+            predictions: Tensor of shape (batch_size,) with probabilities [0, 1] or logits
         """
         # Pass through TCN layers
         y = self.network(x)
@@ -164,8 +165,12 @@ class TCNForex(nn.Module):
         
         # Final classification
         y = self.fc(y)  # Shape: (batch_size, 1)
+        y = y.squeeze(1)  # Shape: (batch_size,)
         
-        return torch.sigmoid(y).squeeze(1)  # Shape: (batch_size,)
+        if return_logits:
+            return y
+        else:
+            return torch.sigmoid(y)
     
     def get_receptive_field(self) -> int:
         """Return the receptive field size"""
@@ -189,7 +194,8 @@ class TCNTrainer:
         self, 
         train_loader,
         criterion,
-        optimizer
+        optimizer,
+        use_logits=False
     ) -> Tuple[float, float]:
         """Train for one epoch"""
         self.model.train()
@@ -203,8 +209,13 @@ class TCNTrainer:
             
             # Forward pass
             optimizer.zero_grad()
-            predictions = self.model(X_batch)
-            loss = criterion(predictions, y_batch.float())
+            if use_logits:
+                logits = self.model(X_batch, return_logits=True)
+                loss = criterion(logits, y_batch.float())
+                predictions = torch.sigmoid(logits)
+            else:
+                predictions = self.model(X_batch, return_logits=False)
+                loss = criterion(predictions, y_batch.float())
             
             # Backward pass
             loss.backward()
@@ -224,7 +235,8 @@ class TCNTrainer:
     def validate(
         self,
         val_loader,
-        criterion
+        criterion,
+        use_logits=False
     ) -> Tuple[float, float]:
         """Validate the model"""
         self.model.eval()
@@ -238,8 +250,13 @@ class TCNTrainer:
                 y_batch = y_batch.to(self.device)
                 
                 # Forward pass
-                predictions = self.model(X_batch)
-                loss = criterion(predictions, y_batch.float())
+                if use_logits:
+                    logits = self.model(X_batch, return_logits=True)
+                    loss = criterion(logits, y_batch.float())
+                    predictions = torch.sigmoid(logits)
+                else:
+                    predictions = self.model(X_batch, return_logits=False)
+                    loss = criterion(predictions, y_batch.float())
                 
                 # Metrics
                 total_loss += loss.item() * X_batch.size(0)
@@ -259,12 +276,24 @@ class TCNTrainer:
         epochs: int = 50,
         learning_rate: float = 0.001,
         early_stopping_patience: int = 10,
-        verbose: bool = True
+        verbose: bool = True,
+        pos_weight: float = None
     ):
         """
         Train the model with early stopping
+        
+        Args:
+            pos_weight: Weight for positive class to handle imbalance (None = no weighting)
         """
-        criterion = nn.BCELoss()
+        # Use weighted BCE loss if pos_weight provided
+        if pos_weight is not None:
+            pos_weight_tensor = torch.tensor([pos_weight]).to(self.device)
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
+            use_logits = True
+        else:
+            criterion = nn.BCELoss()
+            use_logits = False
+        
         optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
         
         best_val_loss = float('inf')
@@ -272,12 +301,12 @@ class TCNTrainer:
         
         for epoch in range(epochs):
             # Train
-            train_loss, train_acc = self.train_epoch(train_loader, criterion, optimizer)
+            train_loss, train_acc = self.train_epoch(train_loader, criterion, optimizer, use_logits)
             self.history['train_loss'].append(train_loss)
             self.history['train_acc'].append(train_acc)
             
             # Validate
-            val_loss, val_acc = self.validate(val_loader, criterion)
+            val_loss, val_acc = self.validate(val_loader, criterion, use_logits)
             self.history['val_loss'].append(val_loss)
             self.history['val_acc'].append(val_acc)
             

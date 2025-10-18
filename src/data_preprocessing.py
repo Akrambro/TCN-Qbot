@@ -354,10 +354,10 @@ class ForexDataPreprocessor:
         # Drop NaN values
         df = df.dropna()
         
-        # Select feature columns (exclude OHLCV and target)
+        # Select feature columns (exclude OHLCV, target, and timestamp)
         exclude_cols = ['open', 'high', 'low', 'close', 'volume', 'target', 
-                       'next_close', 'minute_of_day']
-        feature_columns = [col for col in df.columns if col not in exclude_cols]
+                       'next_close', 'minute_of_day', 'timestamp', 'date', 'time', 'datetime']
+        feature_columns = [col for col in df.columns if col not in exclude_cols and df[col].dtype in ['float64', 'int64']]
         
         # Normalize features
         df = self.normalize_features(df, feature_columns, fit=fit)
