@@ -386,15 +386,25 @@ The training script performs these steps:
 
 1. **Data Loading**: Loads historical OHLCV data
 2. **Feature Engineering**: Adds 30+ technical indicators
-3. **Sequence Creation**: Creates 50-candle sequences for TCN input
+3. **Sequence Creation**: Creates 60-candle sequences for TCN input
 4. **Model Building**: Constructs TCN architecture with:
-   - 64 filters
-   - Kernel size 3
-   - Dilations [1, 2, 4, 8, 16, 32]
-   - Dropout 0.2-0.3
+   - Multiple temporal blocks (dilated convolutions)
+   - Residual connections for gradient flow
+   - Batch normalization for stability
+   - Dropout for regularization
 5. **Training**: Trains with Adam optimizer and early stopping
 6. **Evaluation**: Tests on validation set
 7. **Saving**: Saves model, scaler, and config
+
+### Using the Training Script
+
+```bash
+# Train with custom data
+python scripts/train_model.py data/EURUSD_1min.csv
+
+# Or use the example which generates sample data
+python examples/quick_start.py
+```
 
 ### Understanding Training Metrics
 
@@ -416,19 +426,101 @@ The training script performs these steps:
 
 ### Walk-Forward Validation
 
-For production models, implement walk-forward validation:
+For production models, the training script supports walk-forward validation for time series:
 
 ```python
-# In train_tcn_model.py
-from sklearn.model_selection import TimeSeriesSplit
+from scripts.train_model import WalkForwardValidator
 
-tscv = TimeSeriesSplit(n_splits=5)
-for train_idx, val_idx in tscv.split(X):
-    X_train, X_val = X[train_idx], X[val_idx]
-    y_train, y_val = y[train_idx], y[val_idx]
+validator = WalkForwardValidator(n_splits=5)
+for train_idx, test_idx in validator.split(X, y):
+    # Train and evaluate on each fold
+    pass
+```
 
-    # Train and evaluate
-    model.train(X_train, y_train, X_val, y_val)
+## 📊 Backtesting
+
+### Running Backtests
+
+After training, evaluate strategy performance on historical data:
+
+```python
+from utils.backtesting import BacktestEngine
+
+backtester = BacktestEngine(
+    initial_balance=1000.0,
+    payout_rate=0.80,
+    min_confidence=0.60,
+    trade_amount=10.0
+)
+
+results = backtester.run_backtest(timestamps, predictions, actuals)
+backtester.plot_results(save_path='backtest_results.png')
+```
+
+### Key Metrics
+
+- **Win Rate**: Percentage of winning trades
+- **Profit Factor**: Total wins / Total losses
+- **Maximum Drawdown**: Largest peak-to-trough decline
+- **Sharpe Ratio**: Risk-adjusted returns
+- **ROI**: Return on investment
+
+### Realistic Expectations
+
+- Training accuracy: 60-65%
+- Validation accuracy: 55-60%
+- **Live trading: 52-58%** (accounting for slippage)
+- Requires continuous monitoring
+- Regular model retraining needed
+- Market conditions affect performance
+
+## 🛡️ Risk Management
+
+### Position Sizing
+
+The bot supports multiple position sizing methods:
+
+```python
+from utils.risk_management import RiskManager
+
+risk_mgr = RiskManager(
+    initial_balance=1000.0,
+    max_risk_per_trade=0.02,  # 2% per trade
+    max_daily_trades=100,
+    max_daily_loss_pct=0.20   # 20% max daily loss
+)
+
+# Check if should trade
+decision = risk_mgr.should_trade(prediction_confidence, date)
+
+# Calculate position size
+position = risk_mgr.calculate_position_size(
+    prediction_confidence,
+    payout_rate=0.80,
+    sizing_method='kelly'  # 'fixed', 'kelly', 'confidence'
+)
+```
+
+### Risk Rules
+
+1. **Maximum Risk Per Trade**: 1-2% of balance
+2. **Daily Loss Limit**: Stop trading after 20% daily loss
+3. **Maximum Daily Trades**: Limit number of trades per day
+4. **Confidence Threshold**: Only trade when confidence >= 60%
+5. **Position Sizing**: Use Kelly criterion or fixed fractional
+
+### Money Management
+
+```python
+# Conservative approach (recommended)
+trade_amount = 0.01 * balance  # 1% per trade
+
+# Aggressive approach (higher risk)
+trade_amount = 0.02 * balance  # 2% per trade
+
+# Kelly criterion (optimal but risky)
+kelly_fraction = (win_rate * (1 + payout) - 1) / payout
+trade_amount = kelly_fraction * 0.25 * balance  # Quarter Kelly
 ```
 
 ## 📊 Live Trading
