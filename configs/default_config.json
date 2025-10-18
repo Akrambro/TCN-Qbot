@@ -1,0 +1,37 @@
+{
+  "model": {
+    "sequence_length": 60,
+    "num_channels": [16, 16, 8],
+    "kernel_size": 3,
+    "dropout": 0.1,
+    "input_channels": "auto"
+  },
+  "training": {
+    "batch_size": 64,
+    "epochs": 100,
+    "learning_rate": 0.001,
+    "early_stopping_patience": 15,
+    "train_split": 0.8
+  },
+  "data": {
+    "sequence_length": 60,
+    "prediction_horizon": 1,
+    "use_log_returns": true,
+    "scaler_type": "standard",
+    "add_technical_indicators": true
+  },
+  "trading": {
+    "min_confidence": 0.6,
+    "trade_amount": 10,
+    "expiry_time": 60,
+    "max_daily_trades": 100,
+    "max_daily_loss": 200,
+    "asset": "EURUSD_otc"
+  },
+  "risk_management": {
+    "max_position_size": 0.02,
+    "stop_loss_enabled": false,
+    "take_profit_enabled": false,
+    "trailing_stop": false
+  }
+}

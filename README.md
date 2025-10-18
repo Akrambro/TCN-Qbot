@@ -1,6 +1,17 @@
 # TCN-Based Binary Options Trading Bot for Quotex
 
-A sophisticated trading bot that uses **Temporal Convolutional Networks (TCN)** deep learning model combined with technical indicators to predict next candle direction for binary options trading on the Quotex platform.
+A sophisticated trading bot that uses **PyTorch-based Temporal Convolutional Networks (TCN)** deep learning model combined with technical indicators to predict Forex candle direction for binary options trading.
+
+## 📚 Research-Based Implementation
+
+This implementation is based on the research paper methodology described in `AboutBot.pdf`:
+- **Temporal Convolutional Networks** with dilated causal convolutions
+- **Long-range dependencies** through exponentially increasing dilation factors
+- **Multivariate input channels** (OHLC + technical indicators)
+- **Binary classification** for directional prediction (up/down)
+- **Walk-forward validation** for robust time series evaluation
+
+**Reference**: Bai et al. (2018) - "An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling"
 
 ## ⚠️ IMPORTANT WARNING
 
@@ -16,8 +27,9 @@ A sophisticated trading bot that uses **Temporal Convolutional Networks (TCN)** 
 - [Installation](#installation)
 - [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
+- [Model Architecture](#model-architecture)
+- [Data Collection](#data-collection)
 - [Model Training](#model-training)
-- [Live Trading](#live-trading)
 - [Strategy Explanation](#strategy-explanation)
 - [Performance Optimization](#performance-optimization)
 - [Troubleshooting](#troubleshooting)
@@ -25,11 +37,12 @@ A sophisticated trading bot that uses **Temporal Convolutional Networks (TCN)** 
 
 ## ✨ Features
 
-### Deep Learning Model
-- **TCN Architecture**: State-of-the-art temporal convolutional network with dilated causal convolutions
-- **Long Memory**: Captures patterns from 50+ previous candles using exponential receptive field
+### Deep Learning Model (PyTorch Implementation)
+- **TCN Architecture**: State-of-the-art temporal convolutional network with causal dilated convolutions
+- **Long Memory**: Exponentially increasing dilation [1, 2, 4, 8, 16, 32] captures patterns from 60+ candles
 - **Parallel Processing**: Faster training and inference compared to LSTM/RNN models
-- **Dropout Regularization**: Prevents overfitting with 20-30% dropout layers
+- **Residual Connections**: Skip connections for better gradient flow
+- **Batch Normalization**: Stable and faster training
 
 ### Technical Indicators
 The bot uses 30+ technical indicators for feature engineering:
@@ -48,37 +61,44 @@ The bot uses 30+ technical indicators for feature engineering:
 - ATR (Average True Range)
 
 **Price Features:**
-- Price changes and returns
+- Log returns and percentage changes
 - High-Low range
 - Open-Close differences
 - Lagged features (1, 2, 3, 5 periods)
 
+**Time Features:**
+- Hour of day (cyclical encoding)
+- Day of week
+- Market session indicators (London, NY)
+
 ### Trading Features
 - **Confidence-Based Trading**: Only trades when prediction confidence >= 60%
 - **Real-Time Prediction**: Live candle analysis and prediction
-- **Risk Management**: Configurable trade amount and expiry time
+- **Risk Management**: Configurable trade amount, max daily trades, and loss limits
 - **Performance Tracking**: Win rate, total trades, and P&L monitoring
-- **Practice Mode**: Test strategies without risking real money
+- **Walk-Forward Validation**: Proper time series cross-validation
+- **Backtesting**: Historical performance simulation
 
 ## 🔧 Installation
 
 ### Requirements
 - Python >= 3.10, <= 3.12
 - pip package manager
-- At least 4GB RAM
+- At least 4GB RAM (8GB recommended for training)
+- GPU recommended for faster training (optional)
 - Internet connection
 
-### Step 1: Clone or Download
-
-Download the following files to your project directory:
-- `tcn_quotex_bot.py` - Main trading bot
-- `train_tcn_model.py` - Model training script
-- `requirements.txt` - Dependencies
-
-### Step 2: Install Dependencies
+### Step 1: Clone Repository
 
 ```bash
-# Create virtual environment (recommended)
+git clone https://github.com/Akrambro/TCN-Qbot.git
+cd TCN-Qbot
+```
+
+### Step 2: Create Virtual Environment
+
+```bash
+# Create virtual environment
 python -m venv venv
 
 # Activate virtual environment
@@ -86,134 +106,277 @@ python -m venv venv
 venv\Scripts\activate
 # On macOS/Linux:
 source venv/bin/activate
+```
 
-# Install required packages
-pip install quotexpy tensorflow keras-tcn pandas numpy ta scikit-learn matplotlib
+### Step 3: Install Dependencies
+
+```bash
+# Install all required packages
+pip install -r requirements.txt
 ```
 
 ### Detailed Package Installation
 
 ```bash
-# Core packages
-pip install quotexpy==1.40.7        # Quotex API wrapper
-pip install tensorflow>=2.13.0      # Deep learning framework
-pip install keras-tcn>=2.9.3        # TCN implementation
+# Core deep learning
+pip install torch>=2.0.0              # PyTorch for TCN
+pip install torchvision>=0.15.0       # PyTorch vision utilities
 
 # Data processing
-pip install pandas>=2.0.0           # Data manipulation
-pip install numpy>=1.24.0           # Numerical computing
+pip install pandas>=2.0.0             # Data manipulation
+pip install numpy>=1.24.0             # Numerical computing
 
 # Technical analysis
-pip install ta>=0.11.0              # Technical indicators library
+pip install ta>=0.11.0                # Technical indicators library
 
 # Machine learning utilities
-pip install scikit-learn>=1.3.0     # ML utilities and metrics
+pip install scikit-learn>=1.3.0       # ML utilities and metrics
 
-# Visualization (optional, for training)
-pip install matplotlib>=3.7.0       # Plotting
+# Visualization
+pip install matplotlib>=3.7.0         # Plotting
+pip install seaborn>=0.12.0          # Statistical visualization
+
+# API clients (optional for data collection)
+pip install requests>=2.31.0          # HTTP requests
+
+# For live trading (optional)
+pip install quotexpy==1.40.7         # Quotex API wrapper
 ```
 
 ## 📁 Project Structure
 
 ```
-quotex-tcn-bot/
+TCN-Qbot/
 │
-├── tcn_quotex_bot.py              # Main trading bot
-├── train_tcn_model.py             # Model training script
-├── requirements.txt               # Python dependencies
-├── README.md                      # This file
+├── src/                              # Core source code
+│   ├── __init__.py
+│   ├── tcn_model.py                 # PyTorch TCN implementation
+│   └── data_preprocessing.py        # Feature engineering pipeline
 │
-├── models/                        # Trained models (created after training)
-│   ├── tcn_quotex_model.h5       # Trained TCN model
-│   ├── scaler.pkl                # Feature scaler
-│   └── model_config.json         # Model configuration
+├── scripts/                          # Executable scripts
+│   └── train_model.py               # Model training script
 │
-├── data/                          # Historical data (user-provided)
-│   └── historical_data.csv       # Your market data
+├── utils/                            # Utility functions
+│   ├── __init__.py
+│   └── data_collection.py           # Data collection utilities
 │
-└── logs/                          # Trading logs (created automatically)
-    └── trades_YYYY-MM-DD.log     # Daily trade logs
+├── configs/                          # Configuration files
+│   └── default_config.json          # Default model/trading config
+│
+├── models/                           # Trained models (created after training)
+│   ├── tcn_forex_model.pt           # Trained PyTorch model
+│   ├── preprocessor.pkl             # Feature scaler
+│   └── training_history.png         # Training curves
+│
+├── data/                             # Historical data
+│   ├── README.md                    # Data sources guide
+│   └── *.csv                        # Your market data files
+│
+├── logs/                             # Trading logs (created automatically)
+│   └── trades_YYYY-MM-DD.log        # Daily trade logs
+│
+├── tests/                            # Unit tests (optional)
+│
+├── AboutBot.pdf                      # Research paper reference
+├── PROJECT_SUMMARY.txt               # Project overview
+├── README.md                         # This file
+├── requirements.txt                  # Python dependencies
+├── .gitignore                        # Git ignore rules
+│
+├── tcn_quotex_bot.py                # Legacy Keras implementation
+└── train_tcn_model.py               # Legacy training script
 ```
 
 ## 🚀 Quick Start
 
-### 1. Prepare Historical Data
+### 1. Collect or Prepare Historical Data
 
-Create a CSV file with historical candle data:
+You have several options:
 
+**Option A: Generate Sample Data (for testing)**
+```bash
+python -c "
+from utils.data_collection import ForexDataCollector
+collector = ForexDataCollector()
+df = collector.generate_sample_data(pair='EURUSD', n_candles=10000, save=True)
+"
+```
+
+**Option B: Use Alpha Vantage API**
+```python
+from utils.data_collection import ForexDataCollector
+
+collector = ForexDataCollector()
+df = collector.collect_from_alpha_vantage(
+    symbol='EURUSD',
+    api_key='YOUR_API_KEY',  # Get free key at alphavantage.co
+    interval='1min'
+)
+```
+
+**Option C: Use Your Own CSV Data**
+Place your CSV file in the `data/` directory with format:
 ```csv
 timestamp,open,high,low,close,volume
 2024-01-01 00:00:00,1.10050,1.10080,1.10040,1.10070,250
 2024-01-01 00:01:00,1.10070,1.10090,1.10060,1.10085,300
-...
 ```
 
-**Minimum Requirements:**
-- At least 10,000 candles (preferably 50,000+)
-- 1-minute or 5-minute timeframe
-- Consistent data format
-- No missing values
-
-**Data Sources:**
-- MetaTrader 4/5 export
-- TradingView export
-- Historical data APIs (Alpha Vantage, Yahoo Finance)
-- Quotex historical data (via API)
+See `data/README.md` for more data source options (HistData.com, Dukascopy, MetaTrader, etc.)
 
 ### 2. Train the Model
 
 ```bash
-# Option A: Use sample data for testing
-python train_tcn_model.py
+# Train with your data
+python scripts/train_model.py data/your_data.csv
 
-# Option B: Use your own data (modify script first)
-# Edit train_tcn_model.py, line ~300:
-# df = pd.read_csv('data/your_historical_data.csv')
-python train_tcn_model.py
+# Or use sample data (will be generated automatically)
+python scripts/train_model.py
 ```
 
 **Training Output:**
-- `tcn_quotex_model.h5` - Trained model weights
-- `scaler.pkl` - Feature scaler for normalization
-- `model_config.json` - Model configuration
-- `training_history.png` - Training metrics plot
+- `models/tcn_forex_model.pt` - Trained model weights
+- `models/preprocessor.pkl` - Feature scaler
+- `models/training_history.png` - Training metrics plot
+- `configs/training_config.json` - Model configuration
+- `configs/evaluation_metrics.json` - Performance metrics
 
 **Expected Training Time:**
-- 10,000 candles: ~5-10 minutes (CPU) / 1-2 minutes (GPU)
-- 50,000 candles: ~20-30 minutes (CPU) / 5-10 minutes (GPU)
+- 10,000 candles: ~3-5 minutes (CPU) / 1-2 minutes (GPU)
+- 50,000 candles: ~15-20 minutes (CPU) / 5-10 minutes (GPU)
 
-### 3. Configure the Bot
+### 3. Evaluate Model Performance
 
-Edit `tcn_quotex_bot.py` at the bottom of the file:
+After training, the script automatically evaluates the model and shows:
+- **Classification Metrics**: Accuracy, Precision, Recall, F1, AUC
+- **Confusion Matrix**: True positives, false positives, etc.
+- **Trading Simulation**: Profitability with 60% confidence threshold
+- **Break-even Analysis**: Minimum accuracy needed for profit
+
+Look for:
+- ✅ Validation accuracy >= 55% (break-even)
+- ✅ Trading accuracy >= 60% (profitable)
+- ✅ AUC >= 0.60 (decent discrimination)
+
+### 4. Backtest Strategy (Optional)
 
 ```python
-# Configuration
-EMAIL = "your_email@example.com"     # Your Quotex email
-PASSWORD = "your_password"           # Your Quotex password
-ASSET = "EURUSD_otc"                # Asset to trade
-PRACTICE_MODE = True                # True = Practice, False = Real
+import torch
+from src.tcn_model import TCNForex, TCNTrainer
+from src.data_preprocessing import ForexDataPreprocessor
 
-# Trading parameters (in the class)
-self.min_confidence = 0.60          # Minimum 60% confidence
-self.trade_amount = 10              # $10 per trade
-self.expiry_time = 60               # 60 seconds (1 minute)
+# Load model
+model = TCNForex(input_channels=30, num_channels=[16, 16, 8])
+model.load_state_dict(torch.load('models/tcn_forex_model.pt'))
+
+# Load and preprocess new data
+preprocessor = ForexDataPreprocessor()
+# ... process data ...
+
+# Make predictions
+trainer = TCNTrainer(model)
+predictions = trainer.predict(X_test)
 ```
 
-### 4. Run the Bot
+## 🏗️ Model Architecture
 
-```bash
-# Make sure model is trained first
-python tcn_quotex_bot.py
+### TCN Design (from AboutBot.pdf)
+
+The Temporal Convolutional Network architecture consists of:
+
+1. **Causal Convolutions**: Ensures predictions at time t only use data from t and earlier
+2. **Dilated Convolutions**: Exponentially increasing receptive field (1, 2, 4, 8, 16, 32)
+3. **Residual Blocks**: Skip connections for better gradient flow
+4. **Batch Normalization**: Stable training and faster convergence
+
+```
+Input (batch, channels, sequence_length=60)
+    ↓
+TemporalBlock1 (dilation=1, filters=16)
+    ↓
+TemporalBlock2 (dilation=2, filters=16)
+    ↓
+TemporalBlock3 (dilation=4, filters=8)
+    ↓
+Global Pooling (last time step)
+    ↓
+Fully Connected (output=1)
+    ↓
+Sigmoid Activation
+    ↓
+Output: Probability [0, 1]
 ```
 
-**Bot will:**
-1. Connect to Quotex platform
-2. Load the trained TCN model
-3. Fetch real-time candle data
-4. Calculate technical indicators
-5. Make predictions every 60 seconds
-6. Place trades when confidence >= 60%
-7. Track performance metrics
+**Receptive Field Calculation:**
+- With 3 blocks and kernel_size=3: RF = (3-1) × (2³ - 1) + 1 = 15 time steps
+- Can see up to 15 candles back effectively
+
+### Why TCN Works Better Than LSTM
+
+| Feature | TCN | LSTM |
+|---------|-----|------|
+| Training Speed | **Parallel** (faster) | Sequential (slower) |
+| Memory | **Stable long-term** | Vanishing gradients |
+| Complexity | **Simple** | Complex gates |
+| Inference | **Fast** | Moderate |
+| Receptive Field | **Controllable** (dilation) | Fixed |
+
+### Model Parameters
+
+Default configuration (`configs/default_config.json`):
+
+```json
+{
+  "model": {
+    "sequence_length": 60,
+    "num_channels": [16, 16, 8],
+    "kernel_size": 3,
+    "dropout": 0.1
+  },
+  "training": {
+    "batch_size": 64,
+    "epochs": 100,
+    "learning_rate": 0.001,
+    "early_stopping_patience": 15
+  }
+}
+```
+
+You can customize these parameters based on your data and computational resources.
+
+## 📊 Data Collection
+
+### Supported Data Sources
+
+The `utils/data_collection.py` module supports multiple data sources:
+
+1. **HistData.com** - Free historical tick and 1-minute data
+2. **Dukascopy** - High-quality Swiss broker data
+3. **Alpha Vantage API** - Free with registration (5 calls/min)
+4. **OANDA API** - Practice account access
+5. **MetaTrader** - Export from MT4/MT5
+
+### Data Quality Requirements
+
+**Minimum Requirements:**
+- At least 10,000 candles (50,000+ recommended)
+- 1-minute or 5-minute timeframe
+- Consistent timestamp format
+- No missing values or large gaps
+
+**Data Validation:**
+```python
+from utils.data_collection import ForexDataCollector
+
+collector = ForexDataCollector()
+df = collector.load_from_csv('data/your_data.csv')
+validation = collector.validate_data(df)
+
+if validation['valid']:
+    print("✅ Data is ready for training")
+else:
+    print("❌ Data quality issues found")
+```
 
 ## 🎓 Model Training
 
