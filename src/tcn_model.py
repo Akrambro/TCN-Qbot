@@ -374,7 +374,7 @@ class TCNTrainer:
         scheduler = None
         if use_lr_scheduler:
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, mode='min', factor=0.5, patience=5, verbose=verbose
+                optimizer, mode='min', factor=0.5, patience=5
             )
         
         best_val_loss = float('inf')
