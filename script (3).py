@@ -1,0 +1,35 @@
+
+# Create requirements.txt file
+
+requirements = '''# TCN Binary Options Trading Bot Requirements
+# Python >= 3.10, <= 3.12
+
+# Quotex API
+quotexpy==1.40.7
+
+# Deep Learning
+tensorflow>=2.13.0
+keras>=2.13.0
+keras-tcn>=2.9.3
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Technical Analysis
+ta>=0.11.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+
+# Visualization (optional, for training)
+matplotlib>=3.7.0
+
+# Utilities
+python-dateutil>=2.8.2
+'''
+
+with open('requirements.txt', 'w', encoding='utf-8') as f:
+    f.write(requirements)
+
+print("✅ requirements.txt created successfully!")

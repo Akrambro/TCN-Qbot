@@ -1,4 +1,7 @@
-# TCN-Based Binary Options Trading Bot for Quotex
+
+# Create a comprehensive README file with setup instructions and usage guide
+
+readme_content = '''# TCN-Based Binary Options Trading Bot for Quotex
 
 A sophisticated trading bot that uses **Temporal Convolutional Networks (TCN)** deep learning model combined with technical indicators to predict next candle direction for binary options trading on the Quotex platform.
 
@@ -83,7 +86,7 @@ python -m venv venv
 
 # Activate virtual environment
 # On Windows:
-venv\Scripts\activate
+venv\\Scripts\\activate
 # On macOS/Linux:
 source venv/bin/activate
 
@@ -263,7 +266,7 @@ tscv = TimeSeriesSplit(n_splits=5)
 for train_idx, val_idx in tscv.split(X):
     X_train, X_val = X[train_idx], X[val_idx]
     y_train, y_val = y[train_idx], y[val_idx]
-
+    
     # Train and evaluate
     model.train(X_train, y_train, X_val, y_val)
 ```
@@ -545,3 +548,12 @@ This bot is designed for educational purposes to demonstrate:
 **Last Updated:** October 2025  
 **Author:** TCN Trading Bot Project  
 **Python Version:** 3.10-3.12
+'''
+
+# Save the README
+with open('README.md', 'w', encoding='utf-8') as f:
+    f.write(readme_content)
+
+print("✅ README.md created successfully!")
+print(f"📄 File saved as: README.md")
+print(f"📊 Total lines: {len(readme_content.splitlines())}")
