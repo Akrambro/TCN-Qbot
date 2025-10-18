@@ -173,19 +173,19 @@ def train_model(X_train, y_train, X_val, y_val, n_features, model_path='models/t
     logger.info("TRAINING TCN MODEL (IMPROVED)")
     logger.info("="*80)
     
-    # Create LARGER model for better capacity
+    # Create LARGER model with STRONG REGULARIZATION
     model = TCNForex(
         input_channels=n_features,
         num_channels=[128, 128, 64, 64],  # DOUBLED capacity!
         kernel_size=3,
-        dropout=0.3  # Increased dropout for regularization
+        dropout=0.5  # INCREASED dropout to prevent overfitting!
     )
     
-    logger.info(f"Model architecture (IMPROVED):")
+    logger.info(f"Model architecture (IMPROVED + REGULARIZED):")
     logger.info(f"  Input channels: {n_features}")
     logger.info(f"  Hidden channels: [128, 128, 64, 64] ← LARGER!")
     logger.info(f"  Kernel size: 3")
-    logger.info(f"  Dropout: 0.3")
+    logger.info(f"  Dropout: 0.5 ← STRONG regularization!")
     logger.info(f"  Receptive field: {model.receptive_field}")
     logger.info(f"  Total parameters: {sum(p.numel() for p in model.parameters()):,}")
     
@@ -197,35 +197,67 @@ def train_model(X_train, y_train, X_val, y_val, n_features, model_path='models/t
     
     logger.info(f"Device: {trainer.device}")
     
-    # Create DataLoaders
-    from torch.utils.data import TensorDataset, DataLoader
+    # Create DataLoaders with BALANCED SAMPLING
+    from torch.utils.data import TensorDataset, DataLoader, WeightedRandomSampler
+    from sklearn.metrics import classification_report
     
     train_dataset = TensorDataset(torch.FloatTensor(X_train), torch.LongTensor(y_train))
     val_dataset = TensorDataset(torch.FloatTensor(X_val), torch.LongTensor(y_val))
     
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)  # Smaller batch size
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
-    
-    # Calculate class weights to fix bias
+    # Calculate class distribution
     n_pos = y_train.sum()
     n_neg = len(y_train) - n_pos
-    pos_weight = n_neg / n_pos if n_pos > 0 else 1.0
     
     logger.info(f"\nClass balance:")
     logger.info(f"  Positive samples (UP): {n_pos} ({n_pos/len(y_train)*100:.1f}%)")
     logger.info(f"  Negative samples (DOWN): {n_neg} ({n_neg/len(y_train)*100:.1f}%)")
-    logger.info(f"  Positive class weight: {pos_weight:.4f} ← BALANCING!")
     
-    # Train with class weighting and more epochs
-    logger.info("\nStarting training with CLASS-WEIGHTED LOSS...")
-    logger.info("This will help fix the prediction bias!")
+    # Create BALANCED SAMPLER - ensures 50-50 UP/DOWN in each batch
+    logger.info("Creating balanced sampler...")
+    class_sample_count = np.array([n_neg, n_pos])
+    weight = 1.0 / class_sample_count
+    samples_weight = np.array([weight[int(t)] for t in y_train])
+    samples_weight = torch.from_numpy(samples_weight)
+    
+    sampler = WeightedRandomSampler(
+        weights=samples_weight.type(torch.DoubleTensor),
+        num_samples=len(samples_weight),
+        replacement=True
+    )
+    
+    logger.info("Using BALANCED BATCH SAMPLING - each batch will have ~50% UP, ~50% DOWN")
+    
+    # Create loaders (train uses sampler, validation doesn't shuffle)
+    logger.info("Creating data loaders...")
+    train_loader = DataLoader(train_dataset, batch_size=64, sampler=sampler)
+    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+    
+    logger.info("Data loaders created successfully!")
+    
+    # Train with FOCAL LOSS and strong regularization
+    logger.info("\n" + "="*80)
+    logger.info("TRAINING WITH COMPREHENSIVE FIXES:")
+    logger.info("="*80)
+    logger.info("✓ Focal Loss (alpha=0.25, gamma=2.0) - prevents bias collapse")
+    logger.info("✓ Balanced Batch Sampling - ensures 50-50 UP/DOWN per batch")
+    logger.info("✓ Advanced Price Action Features - stronger signals")
+    logger.info("✓ Higher Dropout (0.5) - reduces overfitting")
+    logger.info("✓ Weight Decay (1e-4) - L2 regularization")
+    logger.info("✓ LR Scheduler - adaptive learning rate")
+    logger.info("="*80 + "\n")
+    
+    logger.info("Starting trainer.fit()...")
     history = trainer.fit(
         train_loader,
         val_loader,
-        epochs=100,  # DOUBLED epochs!
-        learning_rate=0.0005,  # Lower learning rate for stability
-        early_stopping_patience=20,  # More patience
-        pos_weight=pos_weight  # CLASS WEIGHTING!
+        epochs=100,
+        learning_rate=0.0005,
+        early_stopping_patience=30,  # More patience
+        use_focal_loss=True,  # FOCAL LOSS!
+        focal_alpha=0.25,
+        focal_gamma=2.0,
+        weight_decay=1e-4,  # L2 REGULARIZATION!
+        use_lr_scheduler=True  # LR SCHEDULER!
     )
     
     # Save model
@@ -242,7 +274,7 @@ def train_model(X_train, y_train, X_val, y_val, n_features, model_path='models/t
 
 def evaluate_model(trainer, X_test, y_test, test_df):
     """
-    Evaluate model on test set
+    Evaluate model on test set with detailed per-class metrics
     """
     logger.info("\n" + "="*80)
     logger.info("EVALUATING MODEL")
@@ -250,6 +282,8 @@ def evaluate_model(trainer, X_test, y_test, test_df):
     
     # Get predictions (convert numpy array to torch tensor)
     import torch
+    from sklearn.metrics import classification_report, confusion_matrix
+    
     X_test_tensor = torch.FloatTensor(X_test)
     predictions = trainer.predict(X_test_tensor)
     pred_probs = predictions  # Probabilities
@@ -260,10 +294,45 @@ def evaluate_model(trainer, X_test, y_test, test_df):
     up_accuracy = (pred_labels[y_test == 1] == 1).mean() if (y_test == 1).sum() > 0 else 0
     down_accuracy = (pred_labels[y_test == 0] == 0).mean() if (y_test == 0).sum() > 0 else 0
     
+    # Prediction distribution
+    n_pred_up = (pred_labels == 1).sum()
+    n_pred_down = (pred_labels == 0).sum()
+    n_actual_up = (y_test == 1).sum()
+    n_actual_down = (y_test == 0).sum()
+    
     logger.info(f"\nTest Set Performance:")
     logger.info(f"  Overall Accuracy: {accuracy*100:.2f}%")
     logger.info(f"  Up Accuracy: {up_accuracy*100:.2f}%")
     logger.info(f"  Down Accuracy: {down_accuracy*100:.2f}%")
+    
+    logger.info(f"\nPrediction Distribution (BIAS CHECK):")
+    logger.info(f"  Predicted UP: {n_pred_up} ({n_pred_up/len(y_test)*100:.1f}%)")
+    logger.info(f"  Predicted DOWN: {n_pred_down} ({n_pred_down/len(y_test)*100:.1f}%)")
+    logger.info(f"  Actual UP: {n_actual_up} ({n_actual_up/len(y_test)*100:.1f}%)")
+    logger.info(f"  Actual DOWN: {n_actual_down} ({n_actual_down/len(y_test)*100:.1f}%)")
+    
+    # Check for bias
+    pred_up_pct = n_pred_up / len(y_test) * 100
+    if pred_up_pct < 30 or pred_up_pct > 70:
+        logger.warning(f"⚠️  WARNING: Model shows BIAS! Predicting {pred_up_pct:.1f}% UP")
+        logger.warning("   A balanced model should predict ~50% UP, ~50% DOWN")
+    else:
+        logger.info(f"✅ Predictions are BALANCED ({pred_up_pct:.1f}% UP, {100-pred_up_pct:.1f}% DOWN)")
+    
+    # Detailed classification report
+    logger.info("\n" + "="*80)
+    logger.info("PER-CLASS METRICS (Precision, Recall, F1-Score):")
+    logger.info("="*80)
+    report = classification_report(y_test, pred_labels, target_names=['DOWN', 'UP'], digits=4)
+    logger.info("\n" + report)
+    
+    # Confusion matrix
+    cm = confusion_matrix(y_test, pred_labels)
+    logger.info("Confusion Matrix:")
+    logger.info(f"              Predicted")
+    logger.info(f"              DOWN    UP")
+    logger.info(f"Actual DOWN   {cm[0,0]:4d}  {cm[0,1]:4d}")
+    logger.info(f"Actual UP     {cm[1,0]:4d}  {cm[1,1]:4d}")
     
     # Confidence analysis
     high_conf_mask = (pred_probs > 0.6) | (pred_probs < 0.4)

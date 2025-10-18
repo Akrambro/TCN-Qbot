@@ -17,6 +17,64 @@ import numpy as np
 from typing import List, Tuple
 
 
+class FocalLoss(nn.Module):
+    """
+    Focal Loss for addressing class imbalance in binary classification.
+    
+    Focal loss down-weights easy examples and focuses on hard, misclassified examples.
+    This prevents the model from collapsing to always predicting the majority class.
+    
+    Formula: FL(p_t) = -alpha * (1 - p_t)^gamma * log(p_t)
+    
+    Args:
+        alpha: Weighting factor in [0, 1] to balance positive/negative examples
+        gamma: Focusing parameter (gamma >= 0). Higher gamma = more focus on hard examples
+        reduction: 'mean', 'sum', or 'none'
+    
+    Reference: Lin et al. (2017) - Focal Loss for Dense Object Detection
+    """
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+    
+    def forward(self, inputs, targets):
+        """
+        Args:
+            inputs: Logits from model (before sigmoid) [batch_size, 1]
+            targets: Ground truth binary labels [batch_size]
+        """
+        # Convert logits to probabilities
+        probs = torch.sigmoid(inputs).squeeze()
+        
+        # Ensure targets are float
+        targets = targets.float()
+        
+        # Calculate focal loss components
+        # p_t = p if y==1, else (1-p)
+        p_t = probs * targets + (1 - probs) * (1 - targets)
+        
+        # alpha_t = alpha if y==1, else (1-alpha)
+        alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
+        
+        # Focal loss: -alpha_t * (1 - p_t)^gamma * log(p_t)
+        focal_weight = alpha_t * (1 - p_t).pow(self.gamma)
+        
+        # BCE loss: -log(p_t)
+        bce_loss = -torch.log(p_t + 1e-8)  # Add epsilon for numerical stability
+        
+        # Combine
+        focal_loss = focal_weight * bce_loss
+        
+        if self.reduction == 'mean':
+            return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
+        else:
+            return focal_loss
+
+
 class CausalConv1d(nn.Module):
     """
     Causal 1D convolution to ensure output at time t only depends on inputs <= t
@@ -277,16 +335,31 @@ class TCNTrainer:
         learning_rate: float = 0.001,
         early_stopping_patience: int = 10,
         verbose: bool = True,
-        pos_weight: float = None
+        pos_weight: float = None,
+        use_focal_loss: bool = False,
+        focal_alpha: float = 0.25,
+        focal_gamma: float = 2.0,
+        weight_decay: float = 1e-4,
+        use_lr_scheduler: bool = True
     ):
         """
         Train the model with early stopping
         
         Args:
             pos_weight: Weight for positive class to handle imbalance (None = no weighting)
+            use_focal_loss: If True, use Focal Loss instead of BCE (recommended for imbalance)
+            focal_alpha: Alpha parameter for Focal Loss
+            focal_gamma: Gamma parameter for Focal Loss
+            weight_decay: L2 regularization weight decay
+            use_lr_scheduler: If True, use ReduceLROnPlateau scheduler
         """
-        # Use weighted BCE loss if pos_weight provided
-        if pos_weight is not None:
+        # Choose loss function
+        if use_focal_loss:
+            criterion = FocalLoss(alpha=focal_alpha, gamma=focal_gamma)
+            use_logits = True
+            if verbose:
+                print(f"Using Focal Loss (alpha={focal_alpha}, gamma={focal_gamma})")
+        elif pos_weight is not None:
             pos_weight_tensor = torch.tensor([pos_weight]).to(self.device)
             criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
             use_logits = True
@@ -294,7 +367,15 @@ class TCNTrainer:
             criterion = nn.BCELoss()
             use_logits = False
         
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        # Add weight decay (L2 regularization)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        
+        # Learning rate scheduler
+        scheduler = None
+        if use_lr_scheduler:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode='min', factor=0.5, patience=5, verbose=verbose
+            )
         
         best_val_loss = float('inf')
         patience_counter = 0
@@ -310,10 +391,16 @@ class TCNTrainer:
             self.history['val_loss'].append(val_loss)
             self.history['val_acc'].append(val_acc)
             
+            # Learning rate scheduling
+            if scheduler is not None:
+                scheduler.step(val_loss)
+            
             if verbose:
+                current_lr = optimizer.param_groups[0]['lr']
                 print(f"Epoch {epoch+1}/{epochs} - "
                       f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} - "
-                      f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+                      f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f} - "
+                      f"LR: {current_lr:.6f}")
             
             # Early stopping
             if val_loss < best_val_loss:
