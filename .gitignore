@@ -55,6 +55,7 @@ data/*.json
 # Logs
 logs/*.log
 logs/*.txt
+logs/*.jsonl
 *.log
 
 # Credentials (IMPORTANT - Never commit sensitive data)
@@ -88,3 +89,6 @@ training_history.png
 .coverage
 htmlcov/
 .tox/
+
+# Archive (old/temporary files)
+.archive/
